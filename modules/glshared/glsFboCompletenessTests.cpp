@@ -191,6 +191,16 @@ static const FormatKey s_nvSrgbFormatsFormats[] =
 	GL_SRGB8,
 };
 
+static const FormatKey s_nvSrgbFormatsTextureFormats[] =
+{
+	GL_SRGB8,
+
+	// The extension does not actually require any unsized format
+	// to be renderable. However, the renderablility of unsized
+	// SRGB,UBYTE internalformat-type pair is implied.
+	GLS_UNSIZED_FORMATKEY(GL_SRGB,			GL_UNSIGNED_BYTE),
+};
+
 static const FormatKey s_oesRgb8Rgba8TexFormats[] =
 {
 	GLS_UNSIZED_FORMATKEY(GL_RGB,		GL_UNSIGNED_BYTE),

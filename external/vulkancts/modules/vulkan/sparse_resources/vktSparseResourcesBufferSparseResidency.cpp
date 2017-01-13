@@ -137,7 +137,6 @@ BufferSparseResidencyInstance::BufferSparseResidencyInstance (Context&			context
 tcu::TestStatus BufferSparseResidencyInstance::iterate (void)
 {
 	const InstanceInterface&		 instance					= m_context.getInstanceInterface();
-	const DeviceInterface&			 deviceInterface			= m_context.getDeviceInterface();
 	const VkPhysicalDevice			 physicalDevice				= m_context.getPhysicalDevice();
 	const VkPhysicalDeviceProperties physicalDeviceProperties	= getPhysicalDeviceProperties(instance, physicalDevice);
 
@@ -153,8 +152,9 @@ tcu::TestStatus BufferSparseResidencyInstance::iterate (void)
 		createDeviceSupportingQueues(queueRequirements);
 	}
 
-	const Queue& sparseQueue	= getQueue(VK_QUEUE_SPARSE_BINDING_BIT, 0);
-	const Queue& computeQueue	= getQueue(VK_QUEUE_COMPUTE_BIT, 0);
+	const DeviceInterface&	deviceInterface	= getDeviceInterface();
+	const Queue&			sparseQueue		= getQueue(VK_QUEUE_SPARSE_BINDING_BIT, 0);
+	const Queue&			computeQueue	= getQueue(VK_QUEUE_COMPUTE_BIT, 0);
 
 	VkBufferCreateInfo bufferCreateInfo =
 	{
@@ -383,18 +383,14 @@ TestInstance* BufferSparseResidencyCase::createInstance (Context& context) const
 
 } // anonymous ns
 
-tcu::TestCaseGroup* createBufferSparseResidencyTests (tcu::TestContext& testCtx)
+void addBufferSparseResidencyTests(tcu::TestCaseGroup* group)
 {
-	de::MovePtr<tcu::TestCaseGroup> testGroup(new tcu::TestCaseGroup(testCtx, "buffer_sparse_residency", "Buffer Sparse Residency"));
-
-	testGroup->addChild(new BufferSparseResidencyCase(testCtx, "buffer_size_2_10", "", 1 << 10, glu::GLSL_VERSION_440));
-	testGroup->addChild(new BufferSparseResidencyCase(testCtx, "buffer_size_2_12", "", 1 << 12, glu::GLSL_VERSION_440));
-	testGroup->addChild(new BufferSparseResidencyCase(testCtx, "buffer_size_2_16", "", 1 << 16, glu::GLSL_VERSION_440));
-	testGroup->addChild(new BufferSparseResidencyCase(testCtx, "buffer_size_2_17", "", 1 << 17, glu::GLSL_VERSION_440));
-	testGroup->addChild(new BufferSparseResidencyCase(testCtx, "buffer_size_2_20", "", 1 << 20, glu::GLSL_VERSION_440));
-	testGroup->addChild(new BufferSparseResidencyCase(testCtx, "buffer_size_2_24", "", 1 << 24, glu::GLSL_VERSION_440));
-
-	return testGroup.release();
+	group->addChild(new BufferSparseResidencyCase(group->getTestContext(), "buffer_size_2_10", "", 1 << 10, glu::GLSL_VERSION_440));
+	group->addChild(new BufferSparseResidencyCase(group->getTestContext(), "buffer_size_2_12", "", 1 << 12, glu::GLSL_VERSION_440));
+	group->addChild(new BufferSparseResidencyCase(group->getTestContext(), "buffer_size_2_16", "", 1 << 16, glu::GLSL_VERSION_440));
+	group->addChild(new BufferSparseResidencyCase(group->getTestContext(), "buffer_size_2_17", "", 1 << 17, glu::GLSL_VERSION_440));
+	group->addChild(new BufferSparseResidencyCase(group->getTestContext(), "buffer_size_2_20", "", 1 << 20, glu::GLSL_VERSION_440));
+	group->addChild(new BufferSparseResidencyCase(group->getTestContext(), "buffer_size_2_24", "", 1 << 24, glu::GLSL_VERSION_440));
 }
 
 } // sparse

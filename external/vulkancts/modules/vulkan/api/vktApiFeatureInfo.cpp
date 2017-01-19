@@ -630,7 +630,7 @@ void checkKhrExtensions (tcu::ResultCollector&		results,
 	for (vector<string>::const_iterator extIter = extensions.begin(); extIter != extensions.end(); ++extIter)
 	{
 		// Only Khronos-controlled extensions are checked
-		if ((de::beginsWith(*extIter, "VK_KHR_") || de::beginsWith(*extIter, "VK_KHX_")) &&
+		if (de::beginsWith(*extIter, "VK_KHR_") &&
 			!de::contains(allowedExtSet, *extIter))
 		{
 			results.fail("Unknown KHR extension " + *extIter);
@@ -1870,6 +1870,28 @@ bool isRequiredImageParameterCombination (const VkPhysicalDeviceFeatures&	device
 
 	DE_ASSERT(deviceFeatures.sparseBinding || (createFlags & (VK_IMAGE_CREATE_SPARSE_BINDING_BIT|VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)) == 0);
 	DE_ASSERT(deviceFeatures.sparseResidencyAliased || (createFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT) == 0);
+
+	if (createFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)
+	{
+		if (isCompressedFormat(format))
+			return false;
+
+		if (isDepthStencilFormat(format))
+			return false;
+
+		if (!deIsPowerOfTwo32(mapVkFormat(format).getPixelSize()))
+			return false;
+
+		switch (imageType)
+		{
+			case VK_IMAGE_TYPE_2D:
+				return (deviceFeatures.sparseResidencyImage2D == VK_TRUE);
+			case VK_IMAGE_TYPE_3D:
+				return (deviceFeatures.sparseResidencyImage3D == VK_TRUE);
+			default:
+				return false;
+		}
+	}
 
 	return true;
 }

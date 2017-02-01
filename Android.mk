@@ -591,6 +591,8 @@ LOCAL_SRC_FILES := \
 	modules/gles31/functional/es31fNegativeShaderImageLoadStoreTests.cpp \
 	modules/gles31/functional/es31fNegativeShaderStorageTests.cpp \
 	modules/gles31/functional/es31fNegativeStateApiTests.cpp \
+	modules/gles31/functional/es31fNegativeSSBOBlockTests.cpp \
+	modules/gles31/functional/es31fNegativeTessellationTests.cpp \
 	modules/gles31/functional/es31fNegativeTestShared.cpp \
 	modules/gles31/functional/es31fNegativeTextureApiTests.cpp \
 	modules/gles31/functional/es31fNegativeVertexArrayApiTests.cpp \
@@ -750,6 +752,8 @@ LOCAL_SRC_FILES := \
 	external/vulkancts/modules/vulkan/draw/vktDrawIndexedTest.cpp \
 	external/vulkancts/modules/vulkan/draw/vktDrawIndirectTest.cpp \
 	external/vulkancts/modules/vulkan/draw/vktDrawInstancedTests.cpp \
+	external/vulkancts/modules/vulkan/draw/vktDrawNegativeViewportHeightTests.cpp \
+	external/vulkancts/modules/vulkan/draw/vktDrawShaderDrawParametersTests.cpp \
 	external/vulkancts/modules/vulkan/draw/vktDrawSimpleTest.cpp \
 	external/vulkancts/modules/vulkan/draw/vktDrawTests.cpp \
 	external/vulkancts/modules/vulkan/dynamic_state/vktDynamicStateBaseClass.cpp \

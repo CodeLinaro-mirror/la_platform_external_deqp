@@ -270,6 +270,7 @@ LOCAL_SRC_FILES := \
 	modules/egl/teglCreateContextExtTests.cpp \
 	modules/egl/teglCreateContextTests.cpp \
 	modules/egl/teglCreateSurfaceTests.cpp \
+	modules/egl/teglGetFrameTimestampsTests.cpp \
 	modules/egl/teglGetProcAddressTests.cpp \
 	modules/egl/teglGLES1RenderUtil.cpp \
 	modules/egl/teglGLES2RenderUtil.cpp \
@@ -640,6 +641,7 @@ LOCAL_SRC_FILES := \
 	modules/gles31/functional/es31fVertexAttributeBindingTests.cpp \
 	modules/gles31/functional/es31fCopyImageTests.cpp \
 	modules/gles31/functional/es31fDrawBuffersIndexedTests.cpp \
+	modules/gles31/functional/es31fSRGBDecodeTests.cpp \
 	modules/gles31/stress/es31sDrawTests.cpp \
 	modules/gles31/stress/es31sStressTests.cpp \
 	modules/gles31/stress/es31sTessellationGeometryInteractionTests.cpp \

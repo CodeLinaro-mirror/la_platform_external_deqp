@@ -346,7 +346,8 @@ NYC_VULKAN_PKG					= Package(module = VULKAN_MODULE, configurations = [
 MASTER_EGL_COMMON_FILTERS		= [include("egl-master.txt"),
 								   exclude("egl-test-issues.txt"),
 								   exclude("egl-internal-api-tests.txt"),
-								   exclude("egl-manual-robustness.txt")]
+								   exclude("egl-manual-robustness.txt"),
+								   exclude("egl-driver-issues.txt")]
 MASTER_EGL_PKG					= Package(module = EGL_MODULE, configurations = [
 		# Master
 		Configuration(name			= "master",
@@ -440,7 +441,7 @@ MASTER_GLES31_COMMON_FILTERS	= [
 		exclude("gles31-hw-issues.txt"),
 		exclude("gles31-driver-issues.txt"),
 		exclude("gles31-test-issues.txt"),
-		exclude("gles31-spec-issues.txt")
+		exclude("gles31-spec-issues.txt"),
 	]
 MASTER_GLES31_PKG				= Package(module = GLES31_MODULE, configurations = [
 		# Master
@@ -500,7 +501,7 @@ MASTER_VULKAN_FILTERS			= [
 		exclude("vk-not-applicable.txt"),
 		exclude("vk-excluded-tests.txt"),
 		exclude("vk-test-issues.txt"),
-		exclude("vk-waivers.txt")
+		exclude("vk-waivers.txt"),
 	]
 MASTER_VULKAN_PKG				= Package(module = VULKAN_MODULE, configurations = [
 		Configuration(name			= "master",

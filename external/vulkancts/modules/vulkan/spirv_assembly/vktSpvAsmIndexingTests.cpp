@@ -2,7 +2,7 @@
  * Vulkan Conformance Tests
  * ------------------------
  *
- * Copyright (c) 2017 Google Inc.
+ * Copyright (c) 2018 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ using std::pair;
 using tcu::IVec3;
 using tcu::RGBA;
 using tcu::UVec4;
+using tcu::Vec4;
 using tcu::Mat4;
 using tcu::StringTemplate;
 
@@ -56,7 +57,6 @@ enum ChainOp
 	CHAIN_OP_LAST
 };
 static const int					idxSizes[]				= { 16, 32, 64 };
-static const ComputeTestFeatures	computeTestFeatures[]	= { COMPUTE_TEST_USES_INT16, COMPUTE_TEST_USES_NONE, COMPUTE_TEST_USES_INT64 };
 static const string					chainOpTestNames[]		= { "opaccesschain", "opinboundsaccesschain", "opptraccesschain" };
 
 struct InputData
@@ -64,15 +64,16 @@ struct InputData
 	Mat4	matrix[32][32];
 };
 
-void addComputeIndexingTests (tcu::TestCaseGroup* group)
+void addComputeIndexingStructTests (tcu::TestCaseGroup* group)
 {
-	tcu::TestContext&	testCtx			= group->getTestContext();
-	de::Random			rnd				(deStringHash(group->getName()));
-	const int			numItems		= 128;
-	const int			numStructs		= 2;
-	const int			numInputFloats	= (int)sizeof(InputData) / 4 * numStructs;
-	vector<float>		inputData;
-	vector<UVec4>		indexSelectorData;
+	tcu::TestContext&				testCtx				= group->getTestContext();
+	de::MovePtr<tcu::TestCaseGroup> structGroup			(new tcu::TestCaseGroup(testCtx, "struct", "Tests for indexing input struct."));
+	de::Random						rnd					(deStringHash(group->getName()));
+	const int						numItems			= 128;
+	const int						numStructs			= 2;
+	const int						numInputFloats		= (int)sizeof(InputData) / 4 * numStructs;
+	vector<float>					inputData;
+	vector<UVec4>					indexSelectorData;
 
 	inputData.reserve(numInputFloats);
 	for (deUint32 numIdx = 0; numIdx < numInputFloats; ++numIdx)
@@ -94,7 +95,6 @@ void addComputeIndexingTests (tcu::TestCaseGroup* group)
 				map<string, string>			specs;
 				vector<float>				outputData;
 				ComputeShaderSpec			spec;
-				const ComputeTestFeatures	features		= computeTestFeatures[idxSizeIdx];
 				int							element			= 0;
 
 				// Index an input buffer containing 2D array of 4x4 matrices. The indices are read from another
@@ -252,7 +252,7 @@ void addComputeIndexingTests (tcu::TestCaseGroup* group)
 					specs["intdecl"] =	"                      %u64 = OpTypeInt 64 0\n"
 								"                      %i64 = OpTypeInt 64 1\n";
 				} else {
-					specs["convert"] = "OpCopyObject";
+					specs["convert"] = "OpBitcast";
 				}
 
 				specs["idx_uint"] = "%u" + de::toString(idxSize);
@@ -261,26 +261,35 @@ void addComputeIndexingTests (tcu::TestCaseGroup* group)
 				spec.assembly					= shaderSource.specialize(specs);
 				spec.numWorkGroups				= IVec3(numItems, 1, 1);
 				spec.requestedVulkanFeatures	= vulkanFeatures;
-				spec.inputTypes[0]				= VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-				spec.inputTypes[1]				= VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+				spec.inputs[0].setDescriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+				spec.inputs[1].setDescriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
 				spec.outputs.push_back(BufferSp(new Float32Buffer(outputData)));
 
-				group->addChild(new SpvAsmComputeShaderCase(testCtx, testName.c_str(), testName.c_str(), spec, features));
+				if (idxSize == 16)
+					spec.requestedVulkanFeatures.coreFeatures.shaderInt16 = VK_TRUE;
+
+				if (idxSize == 64)
+					spec.requestedVulkanFeatures.coreFeatures.shaderInt64 = VK_TRUE;
+
+				structGroup->addChild(new SpvAsmComputeShaderCase(testCtx, testName.c_str(), testName.c_str(), spec));
 			}
 		}
 	}
+	group->addChild(structGroup.release());
 }
 
-void addGraphicsIndexingTests (tcu::TestCaseGroup* group)
+void addGraphicsIndexingStructTests (tcu::TestCaseGroup* group)
 {
-	de::Random			rnd				(deStringHash(group->getName()));
-	const int			numItems		= 128;
-	const int			numStructs		= 2;
-	const int			numInputFloats	= (int)sizeof(InputData) / 4 * numStructs;
-	RGBA				defaultColors[4];
-	vector<float>		inputData;
-	vector<UVec4>		indexSelectorData;
+	tcu::TestContext&				testCtx				= group->getTestContext();
+	de::MovePtr<tcu::TestCaseGroup>	structGroup			(new tcu::TestCaseGroup(testCtx, "struct", "Tests for indexing input struct."));
+	de::Random						rnd					(deStringHash(group->getName()));
+	const int						numItems			= 128;
+	const int						numStructs			= 2;
+	const int						numInputFloats		= (int)sizeof(InputData) / 4 * numStructs;
+	RGBA							defaultColors[4];
+	vector<float>					inputData;
+	vector<UVec4>					indexSelectorData;
 
 	inputData.reserve(numInputFloats);
 	for (deUint32 numIdx = 0; numIdx < numInputFloats; ++numIdx)
@@ -303,7 +312,7 @@ void addGraphicsIndexingTests (tcu::TestCaseGroup* group)
 				VulkanFeatures				vulkanFeatures;
 				vector<string>				extensions;
 				vector<string>				features;
-				vector<deInt32>				noSpecConstants;
+				SpecConstants				noSpecConstants;
 				PushConstants				noPushConstants;
 				GraphicsInterfaces			noInterfaces;
 				map<string, string>			specs;
@@ -371,7 +380,7 @@ void addGraphicsIndexingTests (tcu::TestCaseGroup* group)
 				// Index an input buffer containing 2D array of 4x4 matrices. The indices are read from another
 				// input and converted to the desired bit size and sign.
 				const StringTemplate		testFun(
-					"        %test_code = OpFunction %v4f32 None %v4f32_function\n"
+					"        %test_code = OpFunction %v4f32 None %v4f32_v4f32_function\n"
 					"            %param = OpFunctionParameter %v4f32\n"
 
 					"            %entry = OpLabel\n"
@@ -417,8 +426,8 @@ void addGraphicsIndexingTests (tcu::TestCaseGroup* group)
 
 					"                     OpFunctionEnd\n");
 
-				resources.inputs.push_back(std::make_pair(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, BufferSp(new Float32Buffer(inputData))));
-				resources.inputs.push_back(std::make_pair(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, BufferSp(new Buffer<UVec4>(indexSelectorData))));
+				resources.inputs.push_back(Resource(BufferSp(new Float32Buffer(inputData)), VK_DESCRIPTOR_TYPE_STORAGE_BUFFER));
+				resources.inputs.push_back(Resource(BufferSp(new Buffer<UVec4>(indexSelectorData)), VK_DESCRIPTOR_TYPE_STORAGE_BUFFER));
 
 				if (idxSize == 16)
 				{
@@ -476,7 +485,7 @@ void addGraphicsIndexingTests (tcu::TestCaseGroup* group)
 					outputData.push_back(inputData[element * sizeof(InputData) / 4 + vec.x() * (32 * 4 * 4) + vec.y() * 4 * 4 + vec.z() * 4 + vec.w()]);
 				}
 
-				resources.outputs.push_back(std::make_pair(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, BufferSp(new Float32Buffer(outputData))));
+				resources.outputs.push_back(Resource(BufferSp(new Float32Buffer(outputData)), VK_DESCRIPTOR_TYPE_STORAGE_BUFFER));
 
 				fragments["pre_main"]	= preMain.specialize(specs);
 				fragments["decoration"]	= decoration.specialize(specs);
@@ -484,28 +493,103 @@ void addGraphicsIndexingTests (tcu::TestCaseGroup* group)
 
 				createTestsForAllStages(
 						testName.c_str(), defaultColors, defaultColors, fragments, noSpecConstants,
-						noPushConstants, resources, noInterfaces, extensions, features, vulkanFeatures, group);
+						noPushConstants, resources, noInterfaces, extensions, features, vulkanFeatures, structGroup.get());
 			}
 		}
 	}
+	group->addChild(structGroup.release());
+}
+
+void addGraphicsOutputComponentIndexingTests (tcu::TestCaseGroup* testGroup)
+{
+	RGBA				defaultColors[4];
+	vector<string>		noExtensions;
+	map<string, string>	fragments			= passthruFragments();
+	const deUint32		numItems			= 4;
+	vector<deInt32>		inputData;
+	vector<float>		outputData;
+	const deInt32		pattern[]			= { 2, 0, 1, 3 };
+
+	for (deUint32 itemIdx = 0; itemIdx < numItems; ++itemIdx)
+	{
+		Vec4 output(0.0f);
+		output[pattern[itemIdx]] = 1.0f;
+		outputData.push_back(output.x());
+		outputData.push_back(output.y());
+		outputData.push_back(output.z());
+		outputData.push_back(output.w());
+		inputData.push_back(pattern[itemIdx]);
+	}
+
+	getDefaultColors(defaultColors);
+
+	fragments["pre_main"] =
+		"             %a3u32 = OpTypeArray %u32 %c_i32_3\n"
+		"          %ip_a3u32 = OpTypePointer Input %a3u32\n"
+		"%v4f32_u32_function = OpTypeFunction %v4f32 %u32\n";
+
+	fragments["interface_op_func"] =
+		"%interface_op_func = OpFunction %v4f32 None %v4f32_u32_function\n"
+		"        %io_param1 = OpFunctionParameter %u32\n"
+		"            %entry = OpLabel\n"
+		"              %ret = OpCompositeConstruct %v4f32 %c_f32_0 %c_f32_0 %c_f32_0 %c_f32_0\n"
+		"                     OpReturnValue %ret\n"
+		"                     OpFunctionEnd\n";
+
+	fragments["post_interface_op_vert"] = fragments["post_interface_op_frag"] =
+		"%cpntPtr = OpAccessChain %op_f32 %IF_output %IF_input_val\n"
+		"           OpStore %cpntPtr %c_f32_1\n";
+
+	fragments["post_interface_op_tessc"] =
+		"%cpntPtr0 = OpAccessChain %op_f32 %IF_output %c_i32_0 %IF_input_val0\n"
+		"           OpStore %cpntPtr0 %c_f32_1\n"
+		"%cpntPtr1 = OpAccessChain %op_f32 %IF_output %c_i32_1 %IF_input_val1\n"
+		"           OpStore %cpntPtr1 %c_f32_1\n"
+		"%cpntPtr2 = OpAccessChain %op_f32 %IF_output %c_i32_2 %IF_input_val2\n"
+		"           OpStore %cpntPtr2 %c_f32_1\n";
+
+	fragments["post_interface_op_tesse"] = fragments["post_interface_op_geom"] =
+		"%cpntPtr = OpAccessChain %op_f32 %IF_output %IF_input_val0\n"
+		"           OpStore %cpntPtr %c_f32_1\n";
+
+	fragments["input_type"]		= "u32";
+	fragments["output_type"]	= "v4f32";
+
+	GraphicsInterfaces	interfaces;
+
+	interfaces.setInputOutput(std::make_pair(IFDataType(1, NUMBERTYPE_UINT32), BufferSp(new Int32Buffer(inputData))),
+							  std::make_pair(IFDataType(4, NUMBERTYPE_FLOAT32), BufferSp(new Float32Buffer(outputData))));
+
+	createTestsForAllStages("component", defaultColors, defaultColors, fragments, interfaces, noExtensions, testGroup);
 }
 
 } // anonymous
 
 tcu::TestCaseGroup* createIndexingComputeGroup (tcu::TestContext& testCtx)
 {
-	de::MovePtr<tcu::TestCaseGroup> group		(new tcu::TestCaseGroup(testCtx, "indexing", "Compute tests for data indexing."));
-	addComputeIndexingTests(group.get());
+	de::MovePtr<tcu::TestCaseGroup> indexingGroup	(new tcu::TestCaseGroup(testCtx, "indexing", "Compute tests for data indexing."));
+	de::MovePtr<tcu::TestCaseGroup> inputGroup		(new tcu::TestCaseGroup(testCtx, "input", "Tests for indexing input data."));
 
-	return group.release();
+	addComputeIndexingStructTests(inputGroup.get());
+
+	indexingGroup->addChild(inputGroup.release());
+
+	return indexingGroup.release();
 }
 
 tcu::TestCaseGroup* createIndexingGraphicsGroup (tcu::TestContext& testCtx)
 {
-	de::MovePtr<tcu::TestCaseGroup> group		(new tcu::TestCaseGroup(testCtx, "indexing", "Graphics tests for data indexing."));
-	addGraphicsIndexingTests(group.get());
+	de::MovePtr<tcu::TestCaseGroup> indexingGroup	(new tcu::TestCaseGroup(testCtx, "indexing", "Graphics tests for data indexing."));
+	de::MovePtr<tcu::TestCaseGroup> inputGroup		(new tcu::TestCaseGroup(testCtx, "input", "Tests for indexing input data."));
+	de::MovePtr<tcu::TestCaseGroup> outputGroup		(new tcu::TestCaseGroup(testCtx, "output", "Tests for indexing output data."));
 
-	return group.release();
+	addGraphicsIndexingStructTests(inputGroup.get());
+	addGraphicsOutputComponentIndexingTests(outputGroup.get());
+
+	indexingGroup->addChild(inputGroup.release());
+	indexingGroup->addChild(outputGroup.release());
+
+	return indexingGroup.release();
 }
 
 } // SpirVAssembly

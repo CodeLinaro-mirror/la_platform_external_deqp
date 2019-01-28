@@ -27,6 +27,7 @@
 #include "deSTLUtil.hpp"
 #include "vkQueryUtil.hpp"
 #include "vkRefUtil.hpp"
+#include "vkPlatform.hpp"
 
 namespace vkt
 {
@@ -35,74 +36,93 @@ namespace SpirVAssembly
 
 using namespace vk;
 
-namespace
+bool is8BitStorageFeaturesSupported (const Context& context, Extension8BitStorageFeatures toCheck)
 {
+	VkPhysicalDevice8BitStorageFeaturesKHR extensionFeatures = context.get8BitStorageFeatures();
 
-VkPhysicalDeviceFeatures filterDefaultDeviceFeatures (const VkPhysicalDeviceFeatures& deviceFeatures)
-{
-	VkPhysicalDeviceFeatures enabledDeviceFeatures = deviceFeatures;
+	if ((toCheck & EXT8BITSTORAGEFEATURES_STORAGE_BUFFER) != 0 && extensionFeatures.storageBuffer8BitAccess == VK_FALSE)
+		TCU_FAIL("storageBuffer8BitAccess has to be supported");
 
-	// Disable robustness by default, as it has an impact on performance on some HW.
-	enabledDeviceFeatures.robustBufferAccess = false;
+	if ((toCheck & EXT8BITSTORAGEFEATURES_UNIFORM_STORAGE_BUFFER) != 0 && extensionFeatures.uniformAndStorageBuffer8BitAccess == VK_FALSE)
+		return false;
 
-	return enabledDeviceFeatures;
+	if ((toCheck & EXT8BITSTORAGEFEATURES_PUSH_CONSTANT) != 0 && extensionFeatures.storagePushConstant8 == VK_FALSE)
+		return false;
+
+	return true;
 }
 
-VkPhysicalDevice16BitStorageFeatures	querySupported16BitStorageFeatures (const deUint32 apiVersion, const InstanceInterface& vki, VkPhysicalDevice device, const std::vector<std::string>& instanceExtensions)
+#define IS_CORE_FEATURE_AVAILABLE(CHECKED, AVAILABLE, FEATURE)	\
+	if ((CHECKED.FEATURE != DE_FALSE) && (AVAILABLE.FEATURE == DE_FALSE)) { *missingFeature = #FEATURE; return false; }
+
+bool isCoreFeaturesSupported (const Context&						context,
+							  const vk::VkPhysicalDeviceFeatures&	toCheck,
+							  const char**							missingFeature)
 {
-	VkPhysicalDevice16BitStorageFeatures	extensionFeatures	=
-	{
-		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR,	// sType
-		DE_NULL,														// pNext
-		false,															// storageUniformBufferBlock16
-		false,															// storageUniform16
-		false,															// storagePushConstant16
-		false,															// storageInputOutput16
-	};
-	VkPhysicalDeviceFeatures2			features;
+	const VkPhysicalDeviceFeatures&	availableFeatures	= context.getDeviceFeatures();
 
-	deMemset(&features, 0, sizeof(features));
-	features.sType	= VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-	features.pNext	= &extensionFeatures;
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, robustBufferAccess);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, fullDrawIndexUint32);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, imageCubeArray);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, independentBlend);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, geometryShader);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, tessellationShader);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sampleRateShading);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, dualSrcBlend);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, logicOp);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, multiDrawIndirect);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, drawIndirectFirstInstance);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, depthClamp);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, depthBiasClamp);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, fillModeNonSolid);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, depthBounds);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, wideLines);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, largePoints);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, alphaToOne);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, multiViewport);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, samplerAnisotropy);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, textureCompressionETC2);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, textureCompressionASTC_LDR);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, textureCompressionBC);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, occlusionQueryPrecise);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, pipelineStatisticsQuery);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, vertexPipelineStoresAndAtomics);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, fragmentStoresAndAtomics);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderTessellationAndGeometryPointSize);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderImageGatherExtended);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderStorageImageExtendedFormats);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderStorageImageMultisample);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderStorageImageReadWithoutFormat);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderStorageImageWriteWithoutFormat);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderUniformBufferArrayDynamicIndexing);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderSampledImageArrayDynamicIndexing);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderStorageBufferArrayDynamicIndexing);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderStorageImageArrayDynamicIndexing);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderClipDistance);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderCullDistance);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderFloat64);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderInt64);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderInt16);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderResourceResidency);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, shaderResourceMinLod);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sparseBinding);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sparseResidencyBuffer);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sparseResidencyImage2D);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sparseResidencyImage3D);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sparseResidency2Samples);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sparseResidency4Samples);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sparseResidency8Samples);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sparseResidency16Samples);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, sparseResidencyAliased);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, variableMultisampleRate);
+	IS_CORE_FEATURE_AVAILABLE(toCheck, availableFeatures, inheritedQueries);
 
-	// Call the getter only if supported. Otherwise above "zero" defaults are used
-	if(isInstanceExtensionSupported(apiVersion, instanceExtensions, "VK_KHR_get_physical_device_properties2"))
-	{
-		vki.getPhysicalDeviceFeatures2(device, &features);
-	}
-
-	return extensionFeatures;
+	return true;
 }
 
-VkPhysicalDeviceVariablePointerFeatures querySupportedVariablePointersFeatures (const deUint32 apiVersion, const InstanceInterface& vki, VkPhysicalDevice device, const std::vector<std::string>& instanceExtensions)
+bool is16BitStorageFeaturesSupported (const Context& context, Extension16BitStorageFeatures toCheck)
 {
-	VkPhysicalDeviceVariablePointerFeatures extensionFeatures	=
-	{
-		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES_KHR,	// sType
-		DE_NULL,															// pNext
-		false,																// variablePointersStorageBuffer
-		false,																// variablePointers
-	};
-
-	VkPhysicalDeviceFeatures2	features;
-	deMemset(&features, 0, sizeof(features));
-	features.sType	= VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-	features.pNext	= &extensionFeatures;
-
-	// Call the getter only if supported. Otherwise above "zero" defaults are used
-	if(isInstanceExtensionSupported(apiVersion, instanceExtensions, "VK_KHR_get_physical_device_properties2"))
-	{
-		vki.getPhysicalDeviceFeatures2(device, &features);
-	}
-
-	return extensionFeatures;
-}
-
-} // anonymous
-
-bool is16BitStorageFeaturesSupported (const deUint32 apiVersion, const InstanceInterface& vki, VkPhysicalDevice device, const std::vector<std::string>& instanceExtensions, Extension16BitStorageFeatures toCheck)
-{
-	VkPhysicalDevice16BitStorageFeatures extensionFeatures	= querySupported16BitStorageFeatures(apiVersion, vki, device, instanceExtensions);
+	const VkPhysicalDevice16BitStorageFeatures& extensionFeatures = context.get16BitStorageFeatures();
 
 	if ((toCheck & EXT16BITSTORAGEFEATURES_UNIFORM_BUFFER_BLOCK) != 0 && extensionFeatures.storageBuffer16BitAccess == VK_FALSE)
 		return false;
@@ -119,9 +139,9 @@ bool is16BitStorageFeaturesSupported (const deUint32 apiVersion, const InstanceI
 	return true;
 }
 
-bool isVariablePointersFeaturesSupported (const deUint32 apiVersion, const InstanceInterface& vki, VkPhysicalDevice device, const std::vector<std::string>& instanceExtensions, ExtensionVariablePointersFeatures toCheck)
+bool isVariablePointersFeaturesSupported (const Context& context, ExtensionVariablePointersFeatures toCheck)
 {
-	VkPhysicalDeviceVariablePointerFeatures extensionFeatures = querySupportedVariablePointersFeatures(apiVersion, vki, device, instanceExtensions);
+	const VkPhysicalDeviceVariablePointerFeatures& extensionFeatures = context.getVariablePointerFeatures();
 
 	if ((toCheck & EXTVARIABLEPOINTERSFEATURES_VARIABLE_POINTERS_STORAGEBUFFER) != 0 && extensionFeatures.variablePointersStorageBuffer == VK_FALSE)
 		return false;
@@ -132,85 +152,69 @@ bool isVariablePointersFeaturesSupported (const deUint32 apiVersion, const Insta
 	return true;
 }
 
-Move<VkDevice> createDeviceWithExtensions (Context&							context,
-										   const deUint32					queueFamilyIndex,
-										   const std::vector<std::string>&	supportedExtensions,
-										   const std::vector<std::string>&	requiredExtensions)
+bool isFloat16Int8FeaturesSupported (const Context& context, ExtensionFloat16Int8Features toCheck)
 {
-	const InstanceInterface&					vki							= context.getInstanceInterface();
-	const VkPhysicalDevice						physicalDevice				= context.getPhysicalDevice();
-	std::vector<const char*>					extensions;
-	void*										pExtension					= DE_NULL;
-	const VkPhysicalDeviceFeatures				deviceFeatures				= getPhysicalDeviceFeatures(vki, physicalDevice);
-	VkPhysicalDevice16BitStorageFeatures		ext16BitStorageFeatures;
-	VkPhysicalDeviceVariablePointerFeatures		extVariablePointerFeatures;
+	const VkPhysicalDeviceFloat16Int8FeaturesKHR& extensionFeatures = context.getFloat16Int8Features();
 
-	for (deUint32 extNdx = 0; extNdx < requiredExtensions.size(); ++extNdx)
-	{
-		const std::string&	ext = requiredExtensions[extNdx];
+	if ((toCheck & EXTFLOAT16INT8FEATURES_FLOAT16) != 0 && extensionFeatures.shaderFloat16 == VK_FALSE)
+		return false;
 
-		// Check that all required extensions are supported first.
-		if (!isDeviceExtensionSupported(context.getUsedApiVersion(), supportedExtensions, ext))
-		{
-			TCU_THROW(NotSupportedError, (std::string("Device extension not supported: ") + ext).c_str());
-		}
+	if ((toCheck & EXTFLOAT16INT8FEATURES_INT8) != 0 && extensionFeatures.shaderInt8 == VK_FALSE)
+		return false;
 
-		// Currently don't support enabling multiple extensions at the same time.
-		if (ext == "VK_KHR_16bit_storage")
-		{
-			// For the 16bit storage extension, we have four features to test. Requesting all features supported.
-			// Note that we don't throw NotImplemented errors here if a specific feature is not supported;
-			// that should be done when actually trying to use that specific feature.
-			ext16BitStorageFeatures	= querySupported16BitStorageFeatures(context.getUsedApiVersion(), vki, physicalDevice, context.getInstanceExtensions());
-			pExtension = &ext16BitStorageFeatures;
-		}
-		else if (ext == "VK_KHR_variable_pointers")
-		{
-			// For the VariablePointers extension, we have two features to test. Requesting all features supported.
-			extVariablePointerFeatures	= querySupportedVariablePointersFeatures(context.getUsedApiVersion(), vki, physicalDevice, context.getInstanceExtensions());
-			pExtension = &extVariablePointerFeatures;
-		}
-
-		if (!isCoreDeviceExtension(context.getUsedApiVersion(), ext))
-			extensions.push_back(ext.c_str());
-	}
-
-	const float						queuePriorities[]	= { 1.0f };
-	const VkDeviceQueueCreateInfo	queueInfos[]		=
-	{
-		{
-			VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-			DE_NULL,
-			(VkDeviceQueueCreateFlags)0,
-			queueFamilyIndex,
-			DE_LENGTH_OF_ARRAY(queuePriorities),
-			&queuePriorities[0]
-		}
-	};
-	const VkPhysicalDeviceFeatures	features			= filterDefaultDeviceFeatures(deviceFeatures);
-	const VkDeviceCreateInfo		deviceParams		=
-	{
-		VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-		pExtension,
-		(VkDeviceCreateFlags)0,
-		DE_LENGTH_OF_ARRAY(queueInfos),
-		&queueInfos[0],
-		0u,
-		DE_NULL,
-		(deUint32)extensions.size(),
-		extensions.empty() ? DE_NULL : &extensions[0],
-		&features
-	};
-
-	return vk::createDevice(vki, physicalDevice, &deviceParams);
+	return true;
 }
 
-Allocator* createAllocator (const InstanceInterface& instanceInterface, const VkPhysicalDevice physicalDevice, const DeviceInterface& deviceInterface, const VkDevice device)
+bool isFloatControlsFeaturesSupported (const Context& context, const ExtensionFloatControlsFeatures& toCheck)
 {
-	const VkPhysicalDeviceMemoryProperties memoryProperties = getPhysicalDeviceMemoryProperties(instanceInterface, physicalDevice);
+	ExtensionFloatControlsFeatures refControls;
+	deMemset(&refControls, 0, sizeof(ExtensionFloatControlsFeatures));
 
-	// \todo [2015-07-24 jarkko] support allocator selection/configuration from command line (or compile time)
-	return new SimpleAllocator(deviceInterface, device, memoryProperties);
+	// compare with all flags set to false to verify if any float control features are actualy requested by the test
+	if (deMemCmp(&toCheck, &refControls, sizeof(ExtensionFloatControlsFeatures)) == 0)
+		return true;
+
+	// return false when float control features are requested and proper extension is not supported
+	const std::vector<std::string>& deviceExtensions = context.getDeviceExtensions();
+	if (!isDeviceExtensionSupported(context.getUsedApiVersion(), deviceExtensions, "VK_KHR_shader_float_controls"))
+		return false;
+
+	// perform query to get supported float control properties
+	{
+		refControls.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES_KHR;
+		refControls.pNext = DE_NULL;
+
+		VkPhysicalDeviceProperties2 deviceProperties;
+		deviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		deviceProperties.pNext = &refControls;
+
+		const VkPhysicalDevice			physicalDevice		= context.getPhysicalDevice();
+		const vk::InstanceInterface&	instanceInterface	= context.getInstanceInterface();
+
+		instanceInterface.getPhysicalDeviceProperties2(physicalDevice, &deviceProperties);
+	}
+
+	// check if flags needed by the test are not supported by the device
+	bool requiredFeaturesNotSupported =
+		(toCheck.shaderDenormFlushToZeroFloat16			&& !refControls.shaderDenormFlushToZeroFloat16) ||
+		(toCheck.shaderDenormPreserveFloat16			&& !refControls.shaderDenormPreserveFloat16) ||
+		(toCheck.shaderRoundingModeRTEFloat16			&& !refControls.shaderRoundingModeRTEFloat16) ||
+		(toCheck.shaderRoundingModeRTZFloat16			&& !refControls.shaderRoundingModeRTZFloat16) ||
+		(toCheck.shaderSignedZeroInfNanPreserveFloat16	&& !refControls.shaderSignedZeroInfNanPreserveFloat16) ||
+		(toCheck.shaderDenormFlushToZeroFloat32			&& !refControls.shaderDenormFlushToZeroFloat32) ||
+		(toCheck.shaderDenormPreserveFloat32			&& !refControls.shaderDenormPreserveFloat32) ||
+		(toCheck.shaderRoundingModeRTEFloat32			&& !refControls.shaderRoundingModeRTEFloat32) ||
+		(toCheck.shaderRoundingModeRTZFloat32			&& !refControls.shaderRoundingModeRTZFloat32) ||
+		(toCheck.shaderSignedZeroInfNanPreserveFloat32	&& !refControls.shaderSignedZeroInfNanPreserveFloat32) ||
+		(toCheck.shaderDenormFlushToZeroFloat64			&& !refControls.shaderDenormFlushToZeroFloat64) ||
+		(toCheck.shaderDenormPreserveFloat64			&& !refControls.shaderDenormPreserveFloat64) ||
+		(toCheck.shaderRoundingModeRTEFloat64			&& !refControls.shaderRoundingModeRTEFloat64) ||
+		(toCheck.shaderRoundingModeRTZFloat64			&& !refControls.shaderRoundingModeRTZFloat64) ||
+		(toCheck.shaderSignedZeroInfNanPreserveFloat64	&& !refControls.shaderSignedZeroInfNanPreserveFloat64);
+
+	// we checked if required features are not supported - we need to
+	// negate the result to know if all required features are available
+	return !requiredFeaturesNotSupported;
 }
 
 deUint32 getMinRequiredVulkanVersion (const SpirvVersion version)

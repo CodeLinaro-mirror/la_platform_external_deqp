@@ -30,11 +30,12 @@
 #include "vkBuilderUtil.hpp"
 #include "vkCmdUtil.hpp"
 #include "vkTypeUtil.hpp"
-#include "vktDrawUtil.hpp"
 #include "vktTestGroupUtil.hpp"
+#include "vktTestCase.hpp"
 
 #include "deDefs.h"
 #include "deMath.h"
+#include "deSharedPtr.hpp"
 #include "deString.h"
 
 #include "tcuTestCase.hpp"
@@ -207,6 +208,10 @@ void MemoryModelTestCase::checkSupport(Context& context) const
 	}
 	if (m_data.dataType == DATA_TYPE_UINT64)
 	{
+		if (!context.getDeviceFeatures().shaderInt64)
+		{
+			TCU_THROW(NotSupportedError, "64-bit integer in shaders not supported");
+		}
 		if (!context.getShaderAtomicInt64Features().shaderBufferInt64Atomics &&
 			m_data.guardSC == SC_BUFFER)
 		{
@@ -405,7 +410,9 @@ void MemoryModelTestCase::initPrograms (SourceCollections& programCollection) co
 			"   uint bufferCoord        = gl_VertexIndex;\n"
 			"   uint partnerBufferCoord = subgroupShuffleXor(gl_VertexIndex, gl_SubgroupSize-1);\n"
 			"   ivec2 imageCoord        = ivec2(gl_VertexIndex % (DIM*NUM_WORKGROUP_EACH_DIM), gl_VertexIndex / (DIM*NUM_WORKGROUP_EACH_DIM));\n"
-			"   ivec2 partnerImageCoord = subgroupShuffleXor(imageCoord, gl_SubgroupSize-1);\n";
+			"   ivec2 partnerImageCoord = subgroupShuffleXor(imageCoord, gl_SubgroupSize-1);\n"
+			"   gl_PointSize            = 1.0f;\n"
+			"   gl_Position             = vec4(0.0f, 0.0f, 0.0f, 1.0f);\n\n";
 			break;
 		case STAGE_FRAGMENT:
 			css <<
@@ -454,7 +461,9 @@ void MemoryModelTestCase::initPrograms (SourceCollections& programCollection) co
 			"   uint bufferCoord        = globalId.y * DIM*NUM_WORKGROUP_EACH_DIM + globalId.x;\n"
 			"   uint partnerBufferCoord = partnerGlobalId.y * DIM*NUM_WORKGROUP_EACH_DIM + partnerGlobalId.x;\n"
 			"   ivec2 imageCoord        = globalId;\n"
-			"   ivec2 partnerImageCoord = partnerGlobalId;\n";
+			"   ivec2 partnerImageCoord = partnerGlobalId;\n"
+			"   gl_PointSize            = 1.0f;\n"
+			"   gl_Position             = vec4(0.0f, 0.0f, 0.0f, 1.0f);\n\n";
 			break;
 		case STAGE_FRAGMENT:
 			css <<

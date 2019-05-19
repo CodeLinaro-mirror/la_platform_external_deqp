@@ -25,6 +25,7 @@ import com.android.tradefed.build.IBuildInfo;
 import com.android.tradefed.config.Option;
 import com.android.tradefed.config.OptionClass;
 import com.android.tradefed.device.DeviceNotAvailableException;
+import com.android.tradefed.device.IManagedTestDevice;
 import com.android.tradefed.device.ITestDevice;
 import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.metrics.proto.MetricMeasurement.Metric;
@@ -52,11 +53,8 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -83,7 +81,6 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
     private static final String INCOMPLETE_LOG_MESSAGE = "Crash: Incomplete test log";
     private static final String SKIPPED_INSTANCE_LOG_MESSAGE = "Configuration skipped";
     private static final String NOT_EXECUTABLE_LOG_MESSAGE = "Abort: Test cannot be executed";
-    private static final String SHELL_DIR = "/sdcard/Android/sandbox/com.drawelements.deqp/";
     private static final String APP_DIR = "/sdcard/";
     private static final String CASE_LIST_FILE_NAME = "dEQP-TestCaseList.txt";
     private static final String LOG_FILE_NAME = "TestLog.qpa";
@@ -999,31 +996,7 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
         }
 
         public void recoverDevice() throws DeviceNotAvailableException {
-            // Work around the API. We need to call recoverDevice() on the test device and
-            // we know that mDevice is a TestDevice. However even though the recoverDevice()
-            // method is public suggesting it should be publicly accessible, the class itself
-            // and its super-interface (IManagedTestDevice) are package-private.
-            final Method recoverDeviceMethod;
-            try {
-                recoverDeviceMethod = mDevice.getClass().getMethod("recoverDevice");
-                recoverDeviceMethod.setAccessible(true);
-            } catch (NoSuchMethodException ex) {
-                throw new AssertionError("Test device must have recoverDevice()");
-            }
-
-            try {
-                recoverDeviceMethod.invoke(mDevice);
-            } catch (InvocationTargetException ex) {
-                if (ex.getCause() instanceof DeviceNotAvailableException) {
-                    throw (DeviceNotAvailableException)ex.getCause();
-                } else if (ex.getCause() instanceof RuntimeException) {
-                    throw (RuntimeException)ex.getCause();
-                } else {
-                    throw new AssertionError("unexpected throw", ex);
-                }
-            } catch (IllegalAccessException ex) {
-                throw new AssertionError("unexpected throw", ex);
-            }
+            ((IManagedTestDevice) mDevice).recoverDevice();
         }
 
         private void rebootDevice() throws DeviceNotAvailableException {
@@ -1432,9 +1405,9 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
 
         final String testCases = generateTestCaseTrie(batch.tests);
 
-        mDevice.executeShellCommand("rm " + SHELL_DIR + CASE_LIST_FILE_NAME);
-        mDevice.executeShellCommand("rm " + SHELL_DIR + LOG_FILE_NAME);
-        mDevice.pushString(testCases + "\n", SHELL_DIR + CASE_LIST_FILE_NAME);
+        mDevice.executeShellCommand("rm " + APP_DIR + CASE_LIST_FILE_NAME);
+        mDevice.executeShellCommand("rm " + APP_DIR + LOG_FILE_NAME);
+        mDevice.pushString(testCases + "\n", APP_DIR + CASE_LIST_FILE_NAME);
 
         final String instrumentationName =
                 "com.drawelements.deqp/com.drawelements.deqp.testercore.DeqpInstrumentation";
@@ -1857,6 +1830,10 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
     private static Set<String> getNonPatternFilters(List<String> filters) {
         Set<String> nonPatternFilters = new HashSet<String>();
         for (String filter : filters) {
+            if (filter.startsWith("#") || filter.isEmpty()) {
+                // Skip comments and empty lines
+                continue;
+            }
             if (!filter.contains("*")) {
                 // Deqp usesly only dots for separating between parts of the names
                 // Convert last dot to hash if needed.
@@ -2026,8 +2003,6 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
     private void setupTestEnvironment() throws DeviceNotAvailableException {
         try {
             // Get the system into a known state.
-            // FIXME -- b/115906203 -- Skia Vulkan workaround
-            mDevice.executeShellCommand("setprop debug.hwui.renderer none");
             // Clear ANGLE Global.Settings values
             mDevice.executeShellCommand("settings put global angle_gl_driver_selection_pkgs \"\"");
             mDevice.executeShellCommand("settings put global angle_gl_driver_selection_values \"\"");
@@ -2035,8 +2010,6 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
             // ANGLE
             if (mAngle.equals(ANGLE_VULKAN)) {
                 CLog.i("Configuring ANGLE to use: " + mAngle);
-                // FIXME -- b/115906203 -- Skia Vulkan workaround
-                mDevice.executeShellCommand("setprop debug.hwui.renderer skiavk");
                 // Force dEQP to use ANGLE
                 mDevice.executeShellCommand(
                     "settings put global angle_gl_driver_selection_pkgs " + DEQP_ONDEVICE_PKG);
@@ -2057,7 +2030,7 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
         } catch (DeviceNotAvailableException ex) {
             // chain forward
             CLog.e("Failed to set up ANGLE correctly.");
-            throw new DeviceNotAvailableException("Device not available",
+            throw new DeviceNotAvailableException("Device not available", ex,
                 mDevice.getSerialNumber());
         }
     }
@@ -2070,10 +2043,6 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
         try {
             if (!mAngle.equals(ANGLE_NONE)) {
                 CLog.i("Cleaning up ANGLE");
-                if (mAngle.equals(ANGLE_VULKAN)) {
-                    // FIXME -- b/115906203 -- Undo Skia Vulkan workaround
-                    mDevice.executeShellCommand("setprop debug.hwui.renderer none");
-                }
                 // Stop forcing dEQP to use ANGLE
                 mDevice.executeShellCommand("settings put global angle_gl_driver_selection_pkgs \"\"");
                 mDevice.executeShellCommand("settings put global angle_gl_driver_selection_values \"\"");
@@ -2081,7 +2050,7 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
         } catch (DeviceNotAvailableException ex) {
             // chain forward
             CLog.e("Failed to clean up ANGLE correctly.");
-            throw new DeviceNotAvailableException("Device not available",
+            throw new DeviceNotAvailableException("Device not available", ex,
                 mDevice.getSerialNumber());
         }
     }
@@ -2091,7 +2060,7 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
      */
     @Override
     public void run(ITestInvocationListener listener) throws DeviceNotAvailableException {
-        final Map<String, String> emptyMap = Collections.emptyMap();
+        final HashMap<String, Metric> emptyMap = new HashMap<>();
         // If sharded, split() will load the tests.
         if (mTestInstances == null) {
             loadTests();
@@ -2123,7 +2092,7 @@ public class DeqpTestRunner implements IBuildReceiver, IDeviceTest,
             }
         } catch (CapabilityQueryFailureException ex) {
             // Platform is not behaving correctly, for example crashing when trying to create
-            // a window. Instead of silenty failing, signal failure by leaving the rest of the
+            // a window. Instead of silently failing, signal failure by leaving the rest of the
             // test cases in "NotExecuted" state
             CLog.e("Capability query failed - leaving tests unexecuted.");
         } finally {

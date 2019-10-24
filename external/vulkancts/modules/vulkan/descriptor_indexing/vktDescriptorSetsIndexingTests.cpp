@@ -263,6 +263,8 @@ public:
 
 	static bool					performWritesInVertex			(VkDescriptorType							descriptorType);
 
+	static bool					performWritesInVertex			(VkDescriptorType							descriptorType,
+																 const Context&						context);
 	static std::string			getShaderSource					(VkShaderStageFlagBits						shaderType,
 																 const TestCaseParams&						testCaseParams,
 																 bool										allowVertexStoring);
@@ -717,8 +719,6 @@ const char* CommonDescriptorInstance::getShaderEpilog				(void)
 int	CommonDescriptorInstance::constructShaderModules				(void)
 {
 	int								result	= 0;
-	ut::DeviceProperties			dp		(m_context);
-	const VkPhysicalDeviceFeatures&	feats	= dp.physicalDeviceFeatures();
 	tcu::TestLog&					log		= m_context.getTestContext().getLog();
 
 	if (m_testParams.stageFlags & VK_SHADER_STAGE_COMPUTE_BIT)
@@ -730,14 +730,14 @@ int	CommonDescriptorInstance::constructShaderModules				(void)
 	if (m_testParams.stageFlags & VK_SHADER_STAGE_FRAGMENT_BIT)
 	{
 		++result;
-		const std::string name = ut::buildShaderName(VK_SHADER_STAGE_FRAGMENT_BIT, m_testParams.descriptorType, m_testParams.updateAfterBind, m_testParams.calculateInLoop, (feats.vertexPipelineStoresAndAtomics != DE_FALSE && m_testParams.allowVertexStoring));
+		const std::string name = ut::buildShaderName(VK_SHADER_STAGE_FRAGMENT_BIT, m_testParams.descriptorType, m_testParams.updateAfterBind, m_testParams.calculateInLoop, m_testParams.allowVertexStoring);
 		m_fragmentModule = vk::createShaderModule(m_vki, m_vkd, m_context.getBinaryCollection().get(name), (VkShaderModuleCreateFlags)0);
 		log << tcu::TestLog::Message << "Finally used fragment shader: " << name << '\n' << tcu::TestLog::EndMessage;
 	}
 	if (m_testParams.stageFlags & VK_SHADER_STAGE_VERTEX_BIT)
 	{
 		++result;
-		const std::string name = ut::buildShaderName(VK_SHADER_STAGE_VERTEX_BIT, m_testParams.descriptorType, m_testParams.updateAfterBind, m_testParams.calculateInLoop, (feats.vertexPipelineStoresAndAtomics != DE_FALSE && m_testParams.allowVertexStoring));
+		const std::string name = ut::buildShaderName(VK_SHADER_STAGE_VERTEX_BIT, m_testParams.descriptorType, m_testParams.updateAfterBind, m_testParams.calculateInLoop, m_testParams.allowVertexStoring);
 		m_vertexModule = vk::createShaderModule(m_vki, m_vkd, m_context.getBinaryCollection().get(name), (VkShaderModuleCreateFlags)0);
 		log << tcu::TestLog::Message << "Finally used vertex shader: " << name << '\n' << tcu::TestLog::EndMessage;
 	}
@@ -1252,9 +1252,17 @@ tcu::TestStatus	CommonDescriptorInstance::iterate					(void)
 		updateDescriptors	(v);
 	}
 
-	vk::beginRenderPass		(m_vki, *v.commandBuffer, *v.renderPass, *v.frameBuffer->buffer, v.renderArea, m_clearColor);
-	m_vki.cmdDraw			(*v.commandBuffer, v.vertexCount, 1u, 0u, 0u);
-	vk::endRenderPass		(m_vki, *v.commandBuffer);
+	v.renderArea.extent.width	= m_testParams.frameResolution.width/2;
+	v.renderArea.extent.height	= m_testParams.frameResolution.height/2;
+	for (int x = 0; x < 2; x++)
+		for (int y= 0; y < 2; y++)
+		{
+			v.renderArea.offset.x		= x * m_testParams.frameResolution.width/2;
+			v.renderArea.offset.y		= y * m_testParams.frameResolution.height/2;
+			vk::beginRenderPass		(m_vki, *v.commandBuffer, *v.renderPass, *v.frameBuffer->buffer, v.renderArea, m_clearColor);
+			m_vki.cmdDraw			(*v.commandBuffer, v.vertexCount, 1u, 0u, 0u);
+			vk::endRenderPass		(m_vki, *v.commandBuffer);
+		}
 
 	return (iterateCommandEnd(v) ? tcu::TestStatus::pass : tcu::TestStatus::fail)("");
 }
@@ -1616,6 +1624,22 @@ bool CommonDescriptorInstance::performWritesInVertex				(VkDescriptorType							
 	return result;
 }
 
+bool CommonDescriptorInstance::performWritesInVertex				(VkDescriptorType							descriptorType,
+																	const Context&								context)
+{
+	bool result = false;
+
+	ut::DeviceProperties			dp		(context);
+	const VkPhysicalDeviceFeatures&	feats	= dp.physicalDeviceFeatures();
+
+	if (feats.vertexPipelineStoresAndAtomics != DE_FALSE)
+	{
+		result = CommonDescriptorInstance::performWritesInVertex(descriptorType);
+	}
+
+	return result;
+}
+
 std::string CommonDescriptorInstance::getShaderSource				(VkShaderStageFlagBits						shaderType,
 																	 const TestCaseParams&						testCaseParams,
 																	 bool										allowVertexStoring)
@@ -1815,7 +1839,7 @@ StorageBufferInstance::StorageBufferInstance						(Context&									context,
 			VK_DESCRIPTOR_TYPE_UNDEFINED,
 			BINDING_Undefined,
 			false,
-			performWritesInVertex(testCaseParams.descriptorType),
+			performWritesInVertex(testCaseParams.descriptorType, context),
 			testCaseParams))
 {
 }
@@ -1890,7 +1914,7 @@ UniformBufferInstance::UniformBufferInstance						(Context&									context,
 			VK_DESCRIPTOR_TYPE_UNDEFINED,
 			BINDING_Undefined,
 			false,
-			performWritesInVertex(testCaseParams.descriptorType),
+			performWritesInVertex(testCaseParams.descriptorType, context),
 			testCaseParams))
 {
 }
@@ -1935,7 +1959,7 @@ StorageTexelInstance::StorageTexelInstance							(Context&									context,
 			VK_DESCRIPTOR_TYPE_UNDEFINED,
 			BINDING_Undefined,
 			false,
-			performWritesInVertex(testCaseParams.descriptorType),
+			performWritesInVertex(testCaseParams.descriptorType, context),
 			testCaseParams))
 {
 }
@@ -1999,7 +2023,7 @@ UniformTexelInstance::UniformTexelInstance							(Context&									context,
 			VK_DESCRIPTOR_TYPE_UNDEFINED,
 			BINDING_Undefined,
 			false,
-			performWritesInVertex(testCaseParams.descriptorType),
+			performWritesInVertex(testCaseParams.descriptorType, context),
 			testCaseParams))
 {
 }
@@ -2150,7 +2174,7 @@ DynamicStorageBufferInstance::DynamicStorageBufferInstance			(Context&					conte
 			VK_DESCRIPTOR_TYPE_UNDEFINED,
 			BINDING_Undefined,
 			false,
-			performWritesInVertex(testCaseParams.descriptorType),
+			performWritesInVertex(testCaseParams.descriptorType, context),
 			testCaseParams)),
 			DynamicBuffersInstance(context, m_testParams), StorageBufferInstance(context, testCaseParams)
 {
@@ -2195,7 +2219,7 @@ DynamicUniformBufferInstance::DynamicUniformBufferInstance			(Context&					conte
 			VK_DESCRIPTOR_TYPE_UNDEFINED,
 			BINDING_Undefined,
 			false,
-			performWritesInVertex(testCaseParams.descriptorType),
+			performWritesInVertex(testCaseParams.descriptorType, context),
 			testCaseParams)),
 			DynamicBuffersInstance(context, m_testParams), UniformBufferInstance(context, testCaseParams)
 {
@@ -2238,7 +2262,7 @@ InputAttachmentInstance::InputAttachmentInstance					(Context&									context,
 			VK_DESCRIPTOR_TYPE_UNDEFINED,
 			BINDING_Undefined,
 			true,
-			performWritesInVertex(testCaseParams.descriptorType),
+			performWritesInVertex(testCaseParams.descriptorType, context),
 			testCaseParams))
 {
 }
@@ -2374,7 +2398,7 @@ SamplerInstance::SamplerInstance									(Context&									context,
 			VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
 			BINDING_SampledImage,
 			true,
-			performWritesInVertex(testCaseParams.descriptorType),
+			performWritesInVertex(testCaseParams.descriptorType, context),
 			testCaseParams))
 {
 }
@@ -2487,7 +2511,7 @@ SampledImageInstance::SampledImageInstance							(Context&									context,
 			VK_DESCRIPTOR_TYPE_SAMPLER,
 			BINDING_Sampler,
 			true,
-			performWritesInVertex(testCaseParams.descriptorType),
+			performWritesInVertex(testCaseParams.descriptorType, context),
 			testCaseParams))
 {
 }
@@ -2722,7 +2746,7 @@ StorageImageInstance::StorageImageInstance							(Context&									context,
 					VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 					(BINDING_StorageImage + 1),
 					true,
-					performWritesInVertex(testCaseParams.descriptorType),
+					performWritesInVertex(testCaseParams.descriptorType, context),
 					testCaseParams))
 	, m_buffer		()
 	, m_fillColor	(10)

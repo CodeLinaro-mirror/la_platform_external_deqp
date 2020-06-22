@@ -5715,6 +5715,8 @@ tcu::TestStatus testNoUnknownExtensions (Context& context)
 	// allowedExtensions.insert("VK_GOOGLE_extension1");
 	allowedDeviceExtensions.insert("VK_ANDROID_external_memory_android_hardware_buffer");
 	allowedDeviceExtensions.insert("VK_GOOGLE_display_timing");
+	allowedDeviceExtensions.insert("VK_GOOGLE_decorate_string");
+	allowedDeviceExtensions.insert("VK_GOOGLE_hlsl_functionality1");
 
 	// Instance extensions
 	checkExtensions(results,
@@ -5787,7 +5789,7 @@ tcu::TestStatus testMandatoryExtensions (Context& context)
 			"VK_KHR_get_physical_device_properties2",
 		};
 
-		for (const auto ext : mandatoryExtensions)
+		for (const auto &ext : mandatoryExtensions)
 		{
 			if (!context.isInstanceFunctionalitySupported(ext))
 				results.fail(ext + " is not supported");
@@ -5801,7 +5803,7 @@ tcu::TestStatus testMandatoryExtensions (Context& context)
 			"VK_KHR_maintenance1",
 		};
 
-		for (const auto ext : mandatoryExtensions)
+		for (const auto &ext : mandatoryExtensions)
 		{
 			if (!context.isDeviceFunctionalitySupported(ext))
 				results.fail(ext + " is not supported");

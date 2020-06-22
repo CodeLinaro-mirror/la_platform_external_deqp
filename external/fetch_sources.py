@@ -238,7 +238,7 @@ class GitRepo (Source):
 
 	def detectProtocol(self, cmdProtocol = None):
 		# reuse parent repo protocol
-		proc = subprocess.Popen(['git', 'ls-remote', '--get-url', 'origin'], stdout=subprocess.PIPE)
+		proc = subprocess.Popen(['git', 'ls-remote', '--get-url', 'origin'], stdout=subprocess.PIPE, universal_newlines=True)
 		(stdout, stderr) = proc.communicate()
 
 		if proc.returncode != 0:
@@ -316,18 +316,18 @@ PACKAGES = [
 	GitRepo(
 		"https://github.com/KhronosGroup/SPIRV-Tools.git",
 		None,
-		"323a81fc5e30e43a04e5e22af4cba98ca2a161e6",
+		"34be23373b9e73694c3b214ba857283bad65aedb",
 		"spirv-tools"),
 	GitRepo(
 		"https://github.com/KhronosGroup/glslang.git",
 		None,
-		"ee8e9c15222c2aff93dfea451b1e8a892497ec2d",
+		"b5f003d7a3ece37db45578a8a3140b370036fc64",
 		"glslang",
 		removeTags = ["master-tot"]),
 	GitRepo(
 		"https://github.com/KhronosGroup/SPIRV-Headers.git",
 		None,
-		"842ec90674627ed2ffef609e3cd79d1562eded01",
+		"f8bf11a0253a32375c32cad92c841237b96696c0",
 		"spirv-headers"),
 	GitRepo(
 		"https://github.com/google/amber.git",

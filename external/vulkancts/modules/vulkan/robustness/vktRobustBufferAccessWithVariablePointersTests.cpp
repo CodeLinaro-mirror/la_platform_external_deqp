@@ -63,17 +63,29 @@ using namespace vk;
 namespace
 {
 
-// Creates a custom device with robust buffer access and variable pointer features.
-Move<VkDevice> createRobustBufferAccessVariablePointersDevice (Context& context)
+// A function for getting information on variable pointer features supported through physical device
+vk::VkPhysicalDeviceVariablePointersFeatures querySupportedVariablePointersFeatures (const Context& context)
 {
-	auto pointerFeatures = context.getVariablePointersFeatures();
+	VkPhysicalDeviceVariablePointersFeatures extensionFeatures =
+	{
+		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES_KHR,	// sType
+		DE_NULL,															// pNext
+		false,																// variablePointersStorageBuffer
+		false,																// variablePointers
+	};
 
-	VkPhysicalDeviceFeatures2 features2 = initVulkanStructure();
-	features2.features = context.getDeviceFeatures();
-	features2.features.robustBufferAccess = VK_TRUE;
-	features2.pNext = &pointerFeatures;
+	VkPhysicalDeviceFeatures2	features;
+	deMemset(&features, 0, sizeof(features));
+	features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	features.pNext = &extensionFeatures;
 
-	return createRobustBufferAccessDevice(context, &features2);
+	// Call the getter only if supported. Otherwise above "zero" defaults are used
+	if (context.isInstanceFunctionalitySupported("VK_KHR_get_physical_device_properties2"))
+	{
+		context.getInstanceInterface().getPhysicalDeviceFeatures2(context.getPhysicalDevice(), &features);
+	}
+
+	return extensionFeatures;
 }
 
 // A supplementary structures that can hold information about buffer size
@@ -189,8 +201,6 @@ public:
 	{
 	}
 
-	void						checkSupport (Context &context) const override;
-
 protected:
 	const VkShaderStageFlags	m_shaderStage;
 	const ShaderType			m_shaderType;
@@ -212,13 +222,6 @@ RobustAccessWithPointersTest::RobustAccessWithPointersTest(tcu::TestContext&		te
 	, m_bufferFormat(bufferFormat)
 {
 	DE_ASSERT(m_shaderStage == VK_SHADER_STAGE_VERTEX_BIT || m_shaderStage == VK_SHADER_STAGE_FRAGMENT_BIT || m_shaderStage == VK_SHADER_STAGE_COMPUTE_BIT);
-}
-
-void RobustAccessWithPointersTest::checkSupport (Context &context) const
-{
-	const auto& pointerFeatures = context.getVariablePointersFeatures();
-	if (!pointerFeatures.variablePointersStorageBuffer)
-		TCU_THROW(NotSupportedError, "VariablePointersStorageBuffer SPIR-V capability not supported");
 }
 
 // A subclass for testing reading with variable pointers
@@ -306,7 +309,7 @@ public:
 
 	virtual tcu::TestStatus		iterate						(void);
 
-	virtual bool				verifyResult				(bool splitAccess = false);
+	virtual bool				verifyResult				(void);
 
 private:
 	bool						isExpectedValueFromInBuffer	(VkDeviceSize		offsetInBytes,
@@ -1283,7 +1286,13 @@ RobustReadTest::RobustReadTest (tcu::TestContext&		testContext,
 
 TestInstance* RobustReadTest::createInstance (Context& context) const
 {
-	auto device = createRobustBufferAccessVariablePointersDevice(context);
+	VkPhysicalDeviceVariablePointersFeatures pointerFeatures = querySupportedVariablePointersFeatures(context);
+
+	if (pointerFeatures.variablePointersStorageBuffer != DE_TRUE)
+		return new NotSupportedInstance(context, std::string("VariablePointersStorageBuffer support is required for this test."));
+
+	// We need a device with enabled robust buffer access feature (it is disabled in default device)
+	Move<VkDevice>	device = createRobustBufferAccessDevice(context);
 	return new ReadInstance(context, device, m_shaderType, m_shaderStage, m_bufferFormat, m_readAccessRange, m_accessOutOfBackingMemory);
 }
 
@@ -1317,7 +1326,12 @@ RobustWriteTest::RobustWriteTest (tcu::TestContext&		testContext,
 
 TestInstance* RobustWriteTest::createInstance (Context& context) const
 {
-	auto device = createRobustBufferAccessVariablePointersDevice(context);
+	VkPhysicalDeviceVariablePointersFeatures pointerFeatures = querySupportedVariablePointersFeatures(context);
+	if (pointerFeatures.variablePointersStorageBuffer != DE_TRUE)
+		return new NotSupportedInstance(context, std::string("VariablePointersStorageBuffer support is required for this test."));
+
+	// We need a device with enabled robust buffer access feature (it is disabled in default device)
+	Move<VkDevice>	device = createRobustBufferAccessDevice(context);
 	return new WriteInstance(context, device, m_shaderType, m_shaderStage, m_bufferFormat, m_writeAccessRange, m_accessOutOfBackingMemory);
 }
 
@@ -1505,29 +1519,25 @@ AccessInstance::AccessInstance (Context&			context,
 
 // Verifies if the buffer has the value initialized by BufferAccessInstance::populateReadBuffer at a given offset.
 bool AccessInstance::isExpectedValueFromInBuffer (VkDeviceSize	offsetInBytes,
-												  const void*	valuePtr,
+												  const void*		valuePtr,
 												  VkDeviceSize	valueSize)
 {
 	DE_ASSERT(offsetInBytes % 4 == 0);
 	DE_ASSERT(offsetInBytes < m_inBufferAccess.allocSize);
-	DE_ASSERT(valueSize == 4ull || valueSize == 8ull);
 
 	const deUint32 valueIndex = deUint32(offsetInBytes / 4) + 2;
 
 	if (isUintFormat(m_bufferFormat))
 	{
-		const deUint32 expectedValues[2] = { valueIndex, valueIndex + 1u };
-		return !deMemCmp(valuePtr, &expectedValues, (size_t)valueSize);
+		return !deMemCmp(valuePtr, &valueIndex, (size_t)valueSize);
 	}
 	else if (isIntFormat(m_bufferFormat))
 	{
-		const deInt32 value				= -deInt32(valueIndex);
-		const deInt32 expectedValues[2]	= { value, value - 1 };
-		return !deMemCmp(valuePtr, &expectedValues, (size_t)valueSize);
+		const deInt32 value = -deInt32(valueIndex);
+		return !deMemCmp(valuePtr, &value, (size_t)valueSize);
 	}
 	else if (isFloatFormat(m_bufferFormat))
 	{
-		DE_ASSERT(valueSize == 4ull);
 		const float value = float(valueIndex);
 		return !deMemCmp(valuePtr, &value, (size_t)valueSize);
 	}
@@ -1592,7 +1602,7 @@ tcu::TestStatus AccessInstance::iterate (void)
 		return tcu::TestStatus::fail("Invalid value(s) found");
 }
 
-bool AccessInstance::verifyResult (bool splitAccess)
+bool AccessInstance::verifyResult (void)
 {
 	std::ostringstream	logMsg;
 	tcu::TestLog&		log					= m_context.getTestContext().getLog();
@@ -1603,8 +1613,7 @@ bool AccessInstance::verifyResult (bool splitAccess)
 	deUint32			valueNdx			= 0;
 	const VkDeviceSize	maxAccessRange		= isReadAccess ? m_inBufferAccess.maxAccessRange : m_outBufferAccess.maxAccessRange;
 	const bool			isR64				= (m_bufferFormat == VK_FORMAT_R64_UINT || m_bufferFormat == VK_FORMAT_R64_SINT);
-	const deUint32		unsplitElementSize	= (isR64 ? 8u : 4u);
-	const deUint32		elementSize			= ((isR64 && !splitAccess) ? 8u : 4u);
+	const deUint32		elementSize			= isR64 ? 8 : 4;
 
 	for (VkDeviceSize offsetInBytes = 0; offsetInBytes < m_outBufferAccess.allocSize; offsetInBytes += elementSize)
 	{
@@ -1643,15 +1652,15 @@ bool AccessInstance::verifyResult (bool splitAccess)
 				switch (m_shaderType)
 				{
 					case SHADER_TYPE_SCALAR_COPY:
-						operandSize		= unsplitElementSize; // Size of scalar
+						operandSize		= elementSize; // Size of scalar
 						break;
 
 					case SHADER_TYPE_VECTOR_COPY:
-						operandSize		= unsplitElementSize * 4; // Size of vec4
+						operandSize		= elementSize * 4; // Size of vec4
 						break;
 
 					case SHADER_TYPE_MATRIX_COPY:
-						operandSize		= unsplitElementSize * 16; // Size of mat4
+						operandSize		= elementSize * 16; // Size of mat4
 						break;
 
 					default:
@@ -1724,7 +1733,7 @@ bool AccessInstance::verifyResult (bool splitAccess)
 					}
 				}
 
-				if (!isValidValue && !splitAccess)
+				if (!isValidValue)
 				{
 					// Check if we are satisfying the [0, 0, 0, x] pattern, where x may be either 0 or 1,
 					// or the maximum representable positive integer value (if the format is integer-based).
@@ -1732,12 +1741,12 @@ bool AccessInstance::verifyResult (bool splitAccess)
 					const bool	canMatchVec4Pattern	= (isReadAccess
 													&& !isValuePartiallyOutOfBounds
 													&& (m_shaderType == SHADER_TYPE_VECTOR_COPY)
-													&& (offsetInBytes / elementSize + 1) % 4 == 0);
+													&& (offsetInBytes / 4 + 1) % 4 == 0);
 					bool		matchesVec4Pattern	= false;
 
 					if (canMatchVec4Pattern)
 					{
-						matchesVec4Pattern = verifyOutOfBoundsVec4(outValuePtr - 3u * elementSize, m_bufferFormat);
+						matchesVec4Pattern	= verifyOutOfBoundsVec4(static_cast<const deUint32*>(static_cast<const void*>(outValuePtr)) - 3, m_bufferFormat);
 					}
 
 					if (!canMatchVec4Pattern || !matchesVec4Pattern)
@@ -1764,7 +1773,7 @@ bool AccessInstance::verifyResult (bool splitAccess)
 			{
 				if (isReadAccess)
 				{
-					if (!isExpectedValueFromInBuffer(offsetInBytes, outValuePtr, elementSize))
+					if (!isExpectedValueFromInBuffer(offsetInBytes, outValuePtr, 4))
 					{
 						logMsg << ", Failed: unexpected value";
 						allOk = false;
@@ -1773,7 +1782,7 @@ bool AccessInstance::verifyResult (bool splitAccess)
 				else
 				{
 					// Out of bounds writes may change values within the bounds.
-					if (!isValueWithinBufferOrZero(inDataPtr, m_inBufferAccess.accessRange, outValuePtr, elementSize))
+					if (!isValueWithinBufferOrZero(inDataPtr, m_inBufferAccess.accessRange, outValuePtr, 4))
 					{
 						logMsg << ", Failed: unexpected value";
 						allOk = false;
@@ -1784,12 +1793,6 @@ bool AccessInstance::verifyResult (bool splitAccess)
 	}
 
 	log << tcu::TestLog::Message << logMsg.str() << tcu::TestLog::EndMessage;
-
-	if (!allOk && unsplitElementSize > 4u && !splitAccess)
-	{
-		// "Non-atomic accesses to storage buffers that are a multiple of 32 bits may be decomposed into 32-bit accesses that are individually bounds-checked."
-		return verifyResult(true/*splitAccess*/);
-	}
 
 	return allOk;
 }

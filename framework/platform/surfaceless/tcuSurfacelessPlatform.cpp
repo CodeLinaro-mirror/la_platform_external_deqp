@@ -80,14 +80,6 @@ using std::vector;
 #	define DEQP_OPENGL_LIBRARY_PATH "libGL.so"
 #endif
 
-#if !defined(DEQP_VULKAN_LIBRARY_PATH)
-#	if (DE_OS == DE_OS_ANDROID)
-#		define DEQP_VULKAN_LIBRARY_PATH "libvulkan.so"
-#	else
-#		define DEQP_VULKAN_LIBRARY_PATH "libvulkan.so.1"
-#	endif
-#endif
-
 namespace tcu
 {
 namespace surfaceless
@@ -97,7 +89,7 @@ class VulkanLibrary : public vk::Library
 {
 public:
 	VulkanLibrary (void)
-		: m_library	(DEQP_VULKAN_LIBRARY_PATH)
+		: m_library	("libvulkan.so.1")
 		, m_driver	(m_library)
 	{
 	}
@@ -360,14 +352,9 @@ EglRenderContext::EglRenderContext(const glu::RenderConfig& config, const tcu::C
 		eglGetConfigAttrib(m_eglDisplay, all_configs[i], EGL_STENCIL_SIZE, &stencil);
 		eglGetConfigAttrib(m_eglDisplay, all_configs[i], EGL_SAMPLES, &samples);
 
-		if (
-				(glu::RenderConfig::DONT_CARE == config.redBits		|| red		== config.redBits)		&&
-				(glu::RenderConfig::DONT_CARE == config.greenBits	|| green	== config.greenBits)	&&
-				(glu::RenderConfig::DONT_CARE == config.blueBits	|| blue		== config.blueBits)		&&
-				(glu::RenderConfig::DONT_CARE == config.alphaBits	|| alpha	== config.alphaBits)	&&
-				(glu::RenderConfig::DONT_CARE == config.depthBits	|| depth	== config.depthBits)	&&
-				(glu::RenderConfig::DONT_CARE == config.stencilBits	|| stencil	== config.stencilBits)	&&
-				(glu::RenderConfig::DONT_CARE == config.numSamples	|| samples	== config.numSamples)) {
+		if ((red == config.redBits) && (green == config.greenBits) && (blue == config.blueBits) &&
+				(alpha == config.alphaBits) && (depth == config.depthBits) &&
+				(stencil == config.stencilBits) && (samples == config.numSamples)) {
 			egl_config = all_configs[i];
 			break;
 		}
